@@ -1,0 +1,17 @@
+{
+  "name": "gentest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "gentest.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "eslint": "^5.16.0"
+  }
+}
