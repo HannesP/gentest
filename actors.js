@@ -97,18 +97,17 @@ class ActorSystem {
         this.current[ref] = next.value;
       }
     } catch (err) {
-      console.log("failed!");
       this.cleanUp(ref, Reasons.ERROR);
     }
   }
 
   monitor(ref, target) {
     if (ref === target) {
-      this.throw(ref, new Error("an actor cannot monitor itself"));
+      this.throw(ref, "an actor cannot monitor itself");
     }
 
     if (!this.isAlive(ref)) {
-      this.throw(ref, new Error("cannot monitor non-existing actor"));
+      this.throw(ref, "an actor cannot monitor a non-existing actor");
     }
 
     this.monitors[target] = ref;
@@ -118,19 +117,23 @@ class ActorSystem {
     return this.registry.hasOwnProperty(ref);
   }
 
-  throw(ref, error) {
+  throw(ref, msg) {
     const actor = this.registry[ref];
-    actor.throw(error);
+    actor.throw(new Error(msg));
+  }
+
+  init(ref) {
+    this.started[ref] = true;
+    this.feed(ref);
   }
 
   workRef(ref) {
     if (!this.started[ref]) {
-      this.started[ref] = true;
-      this.feed(ref);
+      this.init(ref);
     }
 
-    if (!this.registry.hasOwnProperty(ref)) {
-      // Crashed or finished
+    // Might have died during initialisation
+    if (!this.isAlive(ref)) {
       return;
     }
 
