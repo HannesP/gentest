@@ -30,59 +30,66 @@ class ActorSystem {
   }
 
   spawn(actorFun, param, options = {}) {
-    const ref = uuid_v4();
-    this.mailboxes[ref] = [];
-    this.registry[ref] = actorFun.bind(ref)(param);
+    const pid = uuid_v4();
+    this.mailboxes[pid] = [];
+    this.registry[pid] = actorFun.bind(pid)(param);
 
     const { name } = options;
     if (name) {
-      this.names[name] = ref;
-      this.namesReverse[ref] = name;
+      this.names[name] = pid;
+      this.namesReverse[pid] = name;
 
-      console.log(`${name} -> ${ref}`);
+      console.log(`${name} -> ${pid}`);
     }
 
-    return ref;
+    return pid;
   }
 
   postMessage(ref, message) {
-    const mailbox = this.mailboxes[ref];
+    const pid = this.resolveRef(ref);
+    const mailbox = this.mailboxes[pid];
+    
     if (mailbox == null) {
-      const actor = this.registry[ref];
+      const actor = this.registry[pid];
       actor.throw(new Error("trying to mail non-existing actor"));
     } else {
       mailbox.push(message);
     }
   }
 
+  resolveRef(ref) {
+    const resolved = this.names[ref];
+    return resolved || ref;
+  }
+
   work() {
-    const refs = Object.keys(this.registry);
-    for (const ref of refs) {
-      this.workRef(ref);
+    const pids = Object.keys(this.registry);
+    for (const pid of pids) {
+      this.workProcess(pid);
     }
 
     this.deliverMail();
     setTimeout(() => this.work(), 10);
   }
 
-  cleanUp(ref, reason) {
-    delete this.registry[ref];
-    delete this.mailboxes[ref];
+  cleanUp(pid, reason) {
+    delete this.registry[pid];
+    delete this.mailboxes[pid];
 
-    if (this.names[ref]) {
-      const name = this.namesReverse[ref];
-      delete this.namesReverse[ref];
+    if (this.names[pid]) {
+      const name = this.namesReverse[pid];
+      delete this.namesReverse[pid];
       delete this.names[name];
     }
 
-    const monitor = this.monitors[ref];
+    const monitor = this.monitors[pid];
     if (monitor != null) {
       this.postMessage(monitor, { type: "EXIT", reason });
     }
   }
 
-  nextMail(ref) {
-    const mailbox = this.mailboxes[ref];
+  nextMail(pid) {
+    const mailbox = this.mailboxes[pid];
     if (mailbox == null || mailbox.length === 0) {
       return null;
     }
@@ -91,44 +98,44 @@ class ActorSystem {
   }
 
   deliverMail() {
-    const refs = Object.keys(this.current);
-    for (const ref of refs) {
-      if (this.current[ref].type !== Primitives.RECEIVE) {
+    const pids = Object.keys(this.current);
+    for (const pid of pids) {
+      if (this.current[pid].type !== Primitives.RECEIVE) {
         continue;
       }
 
-      const mail = this.nextMail(ref);
+      const mail = this.nextMail(pid);
       if (mail != null) {
-        this.feed(ref, mail);
+        this.feed(pid, mail);
       }
     }
   }
 
-  feed(ref, value) {
-    const actor = this.registry[ref];
+  feed(pid, value) {
+    const actor = this.registry[pid];
 
     try {
       var next = actor.next(value);
       if (next.done) {
-        this.cleanUp(ref, Reasons.NORMAL);
+        this.cleanUp(pid, Reasons.NORMAL);
       } else {
-        this.current[ref] = next.value;
+        this.current[pid] = next.value;
       }
     } catch (err) {
-      this.cleanUp(ref, Reasons.ERROR);
+      this.cleanUp(pid, Reasons.ERROR);
     }
   }
 
-  monitor(ref, target) {
-    if (ref === target) {
-      this.throw(ref, "an actor cannot monitor itself");
+  monitor(pid, target) {
+    if (pid === target) {
+      this.throw(pid, "an actor cannot monitor itself");
     }
 
-    if (!this.isAlive(ref)) {
-      this.throw(ref, "an actor cannot monitor a non-existing actor");
+    if (!this.isAlive(pid)) {
+      this.throw(pid, "an actor cannot monitor a non-existing actor");
     }
 
-    this.monitors[target] = ref;
+    this.monitors[target] = pid;
   }
 
   isAlive(ref) {
@@ -145,28 +152,30 @@ class ActorSystem {
     this.feed(ref);
   }
 
-  workRef(ref) {
-    if (!this.started[ref]) {
-      this.init(ref);
+  workProcess(pid) {
+    // Rethink this?
+
+    if (!this.started[pid]) {
+      this.init(pid);
     }
 
     // Might have died during initialisation
-    if (!this.isAlive(ref)) {
+    if (!this.isAlive(pid)) {
       return;
     }
 
-    const current = this.current[ref];
+    const current = this.current[pid];
     const { type, ...params } = current;
 
     if (type === Primitives.SPAWN) {
-      const spawnedRef = this.spawn(params.actor, params.param, params.options);
-      this.feed(ref, spawnedRef);
+      const spawnedPid = this.spawn(params.actor, params.param, params.options);
+      this.feed(pid, spawnedPid);
     } else if (type === Primitives.SEND) {
       this.postMessage(params.ref, params.message);
-      this.feed(ref);
+      this.feed(pid);
     } else if (type === Primitives.MONITOR) {
-      this.monitor(ref, params.ref);
-      this.feed(ref);
+      this.monitor(pid, params.pid);
+      this.feed(pid);
     } else if (type !== Primitives.RECEIVE) {
       throw new Error(`Unhandled command type '${type}'`);
     }
@@ -177,16 +186,16 @@ function receive() {
   return { type: Primitives.RECEIVE };
 }
 
-function send(receiver, message) {
-  return { type: Primitives.SEND, receiver, message };
+function send(ref, message) {
+  return { type: Primitives.SEND, ref, message };
 }
 
 function spawn(actor, param, options) {
   return { type: Primitives.SPAWN, actor, param, options };
 }
 
-function monitor(ref) {
-  return { type: Primitives.MONITOR, ref };
+function monitor(pid) {
+  return { type: Primitives.MONITOR, pid };
 }
 
 exports.ActorSystem = ActorSystem;
