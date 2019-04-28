@@ -34,15 +34,15 @@ function* countingActor(initial) {
     } else if (type === "dec") {
       count -= params.amount;
     } else if (type === "ask") {
-      throw new Error("cannot be asked!");
+      // throw new Error("cannot be asked!");
       yield send(params.caller, count);
     }
   }
 }
 
-function* supervisor([actor, param]) {
+function* supervisor([actor, param, options]) {
   while (true) {
-    const ref = yield spawn(actor, param);
+    const ref = yield spawn(actor, param, options);
     yield monitor(ref);
 
     while (true) {
@@ -55,7 +55,9 @@ function* supervisor([actor, param]) {
 }
 
 function* root() {
-  yield spawn(supervisor, [countingActor, 5]);
+  const spec = [countingActor, 5, { name: "counter" }];
+  yield spawn(supervisor, spec);
+
   while (true) {
     yield receive();
   }

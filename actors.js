@@ -20,16 +20,28 @@ class ActorSystem {
     this.monitors = {};
     this.started = {};
 
+    this.names = {};
+    this.namesReverse = {}
+
     this.start = () => {
       this.spawn(rootActor);
       this.work();
     };
   }
 
-  spawn(actorFun, param) {
+  spawn(actorFun, param, options = {}) {
     const ref = uuid_v4();
     this.mailboxes[ref] = [];
     this.registry[ref] = actorFun.bind(ref)(param);
+
+    const { name } = options;
+    if (name) {
+      this.names[name] = ref;
+      this.namesReverse[ref] = name;
+
+      console.log(`${name} -> ${ref}`);
+    }
+
     return ref;
   }
 
@@ -56,6 +68,12 @@ class ActorSystem {
   cleanUp(ref, reason) {
     delete this.registry[ref];
     delete this.mailboxes[ref];
+
+    if (this.names[ref]) {
+      const name = this.namesReverse[ref];
+      delete this.namesReverse[ref];
+      delete this.names[name];
+    }
 
     const monitor = this.monitors[ref];
     if (monitor != null) {
@@ -141,7 +159,7 @@ class ActorSystem {
     const { type, ...params } = current;
 
     if (type === Primitives.SPAWN) {
-      const spawnedRef = this.spawn(params.actor, params.param);
+      const spawnedRef = this.spawn(params.actor, params.param, params.options);
       this.feed(ref, spawnedRef);
     } else if (type === Primitives.SEND) {
       this.postMessage(params.ref, params.message);
@@ -159,12 +177,12 @@ function receive() {
   return { type: Primitives.RECEIVE };
 }
 
-function send(ref, message) {
-  return { type: Primitives.SEND, ref, message };
+function send(receiver, message) {
+  return { type: Primitives.SEND, receiver, message };
 }
 
-function spawn(actor, param) {
-  return { type: Primitives.SPAWN, actor, param };
+function spawn(actor, param, options) {
+  return { type: Primitives.SPAWN, actor, param, options };
 }
 
 function monitor(ref) {
