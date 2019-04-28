@@ -29,7 +29,7 @@ class ActorSystem {
   spawn(actorFun, param) {
     const ref = uuid_v4();
     this.mailboxes[ref] = [];
-    this.registry[ref] = actorFun(ref, param);
+    this.registry[ref] = actorFun.bind(ref)(param);
     return ref;
   }
 

@@ -7,7 +7,7 @@ const {
   ActorSystem
 } = require("./actors");
 
-function* stack(self, initial) {
+function* stack(initial) {
   let stack = initial ? [...initial] : [];
 
   while (true) {
@@ -24,7 +24,7 @@ function* stack(self, initial) {
   }
 }
 
-function* countingActor(_self, initial) {
+function* countingActor(initial) {
   let count = initial;
 
   while (true) {
@@ -40,7 +40,7 @@ function* countingActor(_self, initial) {
   }
 }
 
-function* supervisor(self, [actor, param]) {
+function* supervisor([actor, param]) {
   while (true) {
     const ref = yield spawn(actor, param);
     yield monitor(ref);
@@ -54,24 +54,12 @@ function* supervisor(self, [actor, param]) {
   }
 }
 
-function* root(self) {
+function* root() {
   yield spawn(supervisor, [countingActor, 5]);
   while (true) {
     yield receive();
   }
-
-  // yield send(ref, { type: "inc", amount: 10 });
-  // yield send(ref, { type: "ask", caller: self });
-  // const answer = yield receive();
-  // console.log(answer); // outputs 7
 }
 
 const system = new ActorSystem(root);
 system.start();
-
-// function* root() {
-//   const ref = yield spawn(failingActor);
-//   yield send(ref, "succeed");
-//   yield send(ref, "succeed");
-//   yield send(ref, "fail");
-// }
