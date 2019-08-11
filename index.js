@@ -3,6 +3,7 @@ const {
   send,
   receive,
   spawn,
+  start,
   Reasons,
   ActorSystem
 } = require("./actors");
@@ -29,6 +30,8 @@ function* countingActor(initial) {
 
   while (true) {
     const { type, ...params } = yield receive();
+    console.log("receiving " + type);
+
     if (type === "inc") {
       count += params.amount;
     } else if (type === "dec") {
@@ -41,9 +44,12 @@ function* countingActor(initial) {
 }
 
 function* supervisor([actor, param, options]) {
+  options = { ...options, start: false };
+
   while (true) {
     const ref = yield spawn(actor, param, options);
     yield monitor(ref);
+    yield start(ref);
 
     while (true) {
       const { reason } = yield receive();
@@ -57,10 +63,7 @@ function* supervisor([actor, param, options]) {
 function* root() {
   const spec = [countingActor, 5, { name: "counter" }];
   yield spawn(supervisor, spec);
-
-  while (true) {
-    yield receive();
-  }
+  // yield send("counter", { type: "inc", amount: 5 });
 }
 
 const system = new ActorSystem(root);

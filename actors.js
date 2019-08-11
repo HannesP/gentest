@@ -4,7 +4,8 @@ const Primitives = {
   RECEIVE: "RECEIVE",
   SPAWN: "SPAWN",
   SEND: "SEND",
-  MONITOR: "MONITOR"
+  MONITOR: "MONITOR",
+  START: "START"
 };
 
 const Reasons = {
@@ -21,7 +22,7 @@ class ActorSystem {
     this.started = {};
 
     this.names = {};
-    this.namesReverse = {}
+    this.namesReverse = {};
 
     this.start = () => {
       this.spawn(rootActor);
@@ -30,16 +31,25 @@ class ActorSystem {
   }
 
   spawn(actorFun, param, options = {}) {
+    const defaultOptions = {
+      start: true
+    };
+
+    options = { ...defaultOptions, ...options };
+
     const pid = uuid_v4();
     this.mailboxes[pid] = [];
     this.registry[pid] = actorFun.bind(pid)(param);
 
-    const { name } = options;
+    const { name, start } = options;
+
     if (name) {
       this.names[name] = pid;
       this.namesReverse[pid] = name;
+    }
 
-      console.log(`${name} -> ${pid}`);
+    if (start) {
+      this.init;
     }
 
     return pid;
@@ -48,7 +58,7 @@ class ActorSystem {
   postMessage(ref, message) {
     const pid = this.resolveRef(ref);
     const mailbox = this.mailboxes[pid];
-    
+
     if (mailbox == null) {
       const actor = this.registry[pid];
       actor.throw(new Error("trying to mail non-existing actor"));
@@ -147,7 +157,7 @@ class ActorSystem {
     actor.throw(new Error(msg));
   }
 
-  init(ref) {
+  start(ref) {
     this.started[ref] = true;
     this.feed(ref);
   }
@@ -155,29 +165,44 @@ class ActorSystem {
   workProcess(pid) {
     // Rethink this?
 
-    if (!this.started[pid]) {
-      this.init(pid);
-    }
+    // if (!this.started[pid]) {
+    //   this.init(pid);
+    // }
 
     // Might have died during initialisation
-    if (!this.isAlive(pid)) {
-      return;
-    }
+    // if (!this.isAlive(pid)) {
+    //   return;
+    // }
 
-    const current = this.current[pid];
-    const { type, ...params } = current;
+    while (true) {
+      const current = this.current[pid];
+      const { type, ...params } = current;
 
-    if (type === Primitives.SPAWN) {
-      const spawnedPid = this.spawn(params.actor, params.param, params.options);
-      this.feed(pid, spawnedPid);
-    } else if (type === Primitives.SEND) {
-      this.postMessage(params.ref, params.message);
-      this.feed(pid);
-    } else if (type === Primitives.MONITOR) {
-      this.monitor(pid, params.pid);
-      this.feed(pid);
-    } else if (type !== Primitives.RECEIVE) {
-      throw new Error(`Unhandled command type '${type}'`);
+      if (type === Primitives.SPAWN) {
+        const spawnedPid = this.spawn(
+          params.actor,
+          params.param,
+          params.options
+        );
+        
+        this.feed(pid, spawnedPid);
+
+        // this.workProcess(spawnedPid); // but what happens if crashes already here?
+        // also should only happen if start = true. do this in this.spawn instead?
+      } else if (type === Primitives.SEND) {
+        this.postMessage(params.ref, params.message);
+        this.feed(pid);
+      } else if (type === Primitives.MONITOR) {
+        this.monitor(pid, params.pid);
+        this.feed(pid);
+      } else if (type === Primitives.START) {
+        // Register start
+        this.feed(pid);
+      } else if (type === Primitives.RECEIVE) {
+        break;
+      } else {
+        throw new Error(`Unhandled command type '${type}'`);
+      }
     }
   }
 }
@@ -198,9 +223,16 @@ function monitor(pid) {
   return { type: Primitives.MONITOR, pid };
 }
 
+function start(pid) {
+  return { type: Primitives.START, pid };
+}
+
 exports.ActorSystem = ActorSystem;
+
 exports.receive = receive;
 exports.send = send;
 exports.spawn = spawn;
 exports.monitor = monitor;
+exports.start = start;
+
 exports.Reasons = Reasons;
